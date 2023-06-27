@@ -1,21 +1,15 @@
 #include "encoder.h"
 
-#include <esp_log.h>
+#include <esp_check.h>
 #include <esp_timer.h>
 #include <freertos/semphr.h>
 #include <driver/gpio.h>
 
 static const char* TAG = "ebtn-encoder";
 
-#define CHECK_ARG(x)                                                                                                                                           \
-   do {                                                                                                                                                        \
-      if (!(x))                                                                                                                                                \
-         return ESP_ERR_INVALID_ARG;                                                                                                                           \
-   } while (0)
-
 #define SEMAPHORE_TAKE()                                                                                                                                       \
    do {                                                                                                                                                        \
-      if (!xSemaphoreTake(mutex, pdMS_TO_TICKS(CONFIG_EBTN_POLLING_INTERVAL_US_ENC / 1000U))) {                                                                                           \
+      if (!xSemaphoreTake(mutex, pdMS_TO_TICKS(CONFIG_EBTN_POLLING_INTERVAL_US_ENC / 1000U))) {                                                                \
          ESP_LOGE(TAG, "Could not take mutex");                                                                                                                \
          return ESP_ERR_TIMEOUT;                                                                                                                               \
       }                                                                                                                                                        \
@@ -90,19 +84,14 @@ static uint8_t gpio_encoder_poll_state(gpio_num_t pin) {
 }
 
 esp_err_t rotary_encoder_init(QueueHandle_t queue) {
-   CHECK_ARG(queue);
+   ESP_RETURN_ON_FALSE(queue, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
 
    _queue = queue;
 
    mutex = xSemaphoreCreateMutex();
-   if (!mutex) {
-      ESP_LOGE(TAG, "Failed to create mutex");
-      return ESP_ERR_NO_MEM;
-   }
+   ESP_RETURN_ON_FALSE(mutex, ESP_ERR_NO_MEM, TAG, "Failed to create mutex");
 
-   esp_err_t err = esp_timer_create(&timer_args, &timer);
-   if (err != ESP_OK)
-      return err;
+   ESP_RETURN_ON_ERROR(esp_timer_create(&timer_args, &timer), TAG, "Failed to create encoder timer");
 
    return esp_timer_start_periodic(timer, CONFIG_EBTN_POLLING_INTERVAL_US_ENC);
 }
@@ -127,17 +116,14 @@ void rotary_encoder_set_prepoll_callback(ebtn_prepoll_cb_t prepoll_callback) {
 }
 
 esp_err_t rotary_encoder_add(rotary_encoder_t* enc) {
-   CHECK_ARG(enc);
+   ESP_RETURN_ON_FALSE(enc, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
 
    SEMAPHORE_TAKE();
 
-   esp_err_t err = ESP_ERR_NO_MEM;
+   esp_err_t ret = ESP_ERR_NO_MEM;
 
    for (uint8_t i = 0; i < CONFIG_EBTN_MAX_COUNT_ENC; i++) {
-      if (encoders[i] == enc) {
-         err = ESP_ERR_INVALID_STATE;
-         break;
-      }
+      ESP_GOTO_ON_FALSE(encoders[i] != enc, ESP_ERR_INVALID_STATE, end, TAG, "Encoder already added");
 
       if (encoders[i])
          continue;
@@ -147,22 +133,22 @@ esp_err_t rotary_encoder_add(rotary_encoder_t* enc) {
 
       if (!enc->poll_state_callback) {
          esp_rom_gpio_pad_select_gpio(enc->pin_a);
-         err = gpio_set_direction(enc->pin_a, GPIO_MODE_INPUT);
-         if (err != ESP_OK)
+         ret = gpio_set_direction(enc->pin_a, GPIO_MODE_INPUT);
+         if (ret != ESP_OK)
             break;
 
          esp_rom_gpio_pad_select_gpio(enc->pin_b);
-         err = gpio_set_direction(enc->pin_b, GPIO_MODE_INPUT);
-         if (err != ESP_OK)
+         ret = gpio_set_direction(enc->pin_b, GPIO_MODE_INPUT);
+         if (ret != ESP_OK)
             break;
 
          if (enc->internal_pull) {
-            err = gpio_set_pull_mode(enc->pin_a, enc->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
-            if (err != ESP_OK)
+            ret = gpio_set_pull_mode(enc->pin_a, enc->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
+            if (ret != ESP_OK)
                break;
 
-            err = gpio_set_pull_mode(enc->pin_b, enc->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
-            if (err != ESP_OK)
+            ret = gpio_set_pull_mode(enc->pin_b, enc->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
+            if (ret != ESP_OK)
                break;
          }
 
@@ -170,16 +156,17 @@ esp_err_t rotary_encoder_add(rotary_encoder_t* enc) {
       }
 
       encoders[i] = enc;
-      err = ESP_OK;
+      ret = ESP_OK;
       break;
    }
 
+end:
    SEMAPHORE_GIVE();
-   return err;
+   return ret;
 }
 
 esp_err_t rotary_encoder_remove(rotary_encoder_t* enc) {
-   CHECK_ARG(enc);
+   ESP_RETURN_ON_FALSE(enc, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
 
    SEMAPHORE_TAKE();
 

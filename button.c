@@ -1,17 +1,11 @@
 #include "button.h"
 
-#include <esp_log.h>
+#include <esp_check.h>
 #include <esp_timer.h>
 #include <freertos/semphr.h>
 #include <driver/gpio.h>
 
 static const char* TAG = "ebtn-button";
-
-#define CHECK_ARG(x)                                                                                                                                           \
-   do {                                                                                                                                                        \
-      if (!(x))                                                                                                                                                \
-         return ESP_ERR_INVALID_ARG;                                                                                                                           \
-   } while (0)
 
 #define SEMAPHORE_TAKE()                                                                                                                                       \
    do {                                                                                                                                                        \
@@ -133,20 +127,15 @@ static uint8_t gpio_button_poll_state(gpio_num_t pin) {
 }
 
 esp_err_t button_init(QueueHandle_t queue) {
-   CHECK_ARG(queue);
+   ESP_RETURN_ON_FALSE(queue, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
 
    _queue = queue;
    time_ms = 0;
 
    mutex = xSemaphoreCreateMutex();
-   if (!mutex) {
-      ESP_LOGE(TAG, "Failed to create mutex");
-      return ESP_ERR_NO_MEM;
-   }
+   ESP_RETURN_ON_FALSE(mutex, ESP_ERR_NO_MEM, TAG, "Failed to create mutex");
 
-   esp_err_t err = esp_timer_create(&timer_args, &timer);
-   if (err != ESP_OK)
-      return err;
+   ESP_RETURN_ON_ERROR(esp_timer_create(&timer_args, &timer), TAG, "Failed to create button timer");
 
    return esp_timer_start_periodic(timer, CONFIG_EBTN_POLLING_INTERVAL_MS_BTN * 1000);
 }
@@ -171,20 +160,15 @@ void button_set_prepoll_callback(ebtn_prepoll_cb_t prepoll_callback) {
 }
 
 esp_err_t button_add(button_t* btn) {
-   CHECK_ARG(btn);
-
-   if (btn->group >= CONFIG_EBTN_MAX_COUNT_BTN_GROUPS)
-      return ESP_ERR_INVALID_STATE;
+   ESP_RETURN_ON_FALSE(btn, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
+   ESP_RETURN_ON_FALSE(btn->group < CONFIG_EBTN_MAX_COUNT_BTN_GROUPS, ESP_ERR_INVALID_STATE, TAG, "Invalid button group");
 
    SEMAPHORE_TAKE();
 
-   esp_err_t err = ESP_ERR_NO_MEM;
+   esp_err_t ret = ESP_ERR_NO_MEM;
 
    for (uint8_t i = 0; i < CONFIG_EBTN_MAX_COUNT_BTN; i++) {
-      if (buttons[i] == btn) {
-         err = ESP_ERR_INVALID_STATE;
-         break;
-      }
+      ESP_GOTO_ON_FALSE(buttons[i] != btn, ESP_ERR_INVALID_STATE, end, TAG, "Button already added");
 
       if (buttons[i])
          continue;
@@ -197,13 +181,13 @@ esp_err_t button_add(button_t* btn) {
 
       if (!btn->poll_state_callback) {
          esp_rom_gpio_pad_select_gpio(btn->pin);
-         err = gpio_set_direction(btn->pin, GPIO_MODE_INPUT);
-         if (err != ESP_OK)
+         ret = gpio_set_direction(btn->pin, GPIO_MODE_INPUT);
+         if (ret != ESP_OK)
             break;
 
          if (btn->internal_pull) {
-            err = gpio_set_pull_mode(btn->pin, btn->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
-            if (err != ESP_OK)
+            ret = gpio_set_pull_mode(btn->pin, btn->active_low ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
+            if (ret != ESP_OK)
                break;
          }
 
@@ -211,17 +195,17 @@ esp_err_t button_add(button_t* btn) {
       }
 
       buttons[i] = btn;
-      err = ESP_OK;
+      ret = ESP_OK;
       break;
    }
 
+end:
    SEMAPHORE_GIVE();
-
-   return err;
+   return ret;
 }
 
 esp_err_t button_remove(button_t* btn) {
-   CHECK_ARG(btn);
+   ESP_RETURN_ON_FALSE(btn, ESP_ERR_INVALID_ARG, TAG, "Invalid arg");
 
    SEMAPHORE_TAKE();
 
