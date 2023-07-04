@@ -79,6 +79,22 @@ esp_err_t button_init(QueueHandle_t queue);
 esp_err_t button_free();
 
 /**
+ * @brief Restarts button polling
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t button_start();
+
+/**
+ * @brief Pauses button polling
+ *
+ * Stops button polling, can be resumed with button_start()
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t button_pause();
+
+/**
  * @brief Sets the pre-poll callback used for buttons
  *
  * Called just before polling all buttons. Useful for applications such as I2C port expanders.

@@ -44,7 +44,7 @@ typedef struct {
 /**
  * @brief Init library
  *
- * Creates and starts button polling timer and mutex.
+ * Creates and starts encoder polling timer and mutex.
  *
  * @param queue Event queue to send encoder events into
  * @return ESP_OK on success
@@ -59,6 +59,22 @@ esp_err_t rotary_encoder_init(QueueHandle_t queue);
  * @return ESP_OK on success
  */
 esp_err_t rotary_encoder_free();
+
+/**
+ * @brief Restarts encoder polling
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t rotary_encoder_start();
+
+/**
+ * @brief Pauses encoder polling
+ *
+ * Stops encoder polling, can be resumed with rotary_encoder_start()
+ *
+ * @return ESP_OK on success
+ */
+esp_err_t rotary_encoder_pause();
 
 /**
  * @brief Sets the pre-poll callback used for rotary encoders

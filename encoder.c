@@ -93,13 +93,13 @@ esp_err_t rotary_encoder_init(QueueHandle_t queue) {
 
    ESP_RETURN_ON_ERROR(esp_timer_create(&timer_args, &timer), TAG, "Failed to create encoder timer");
 
-   return esp_timer_start_periodic(timer, CONFIG_EBTN_POLLING_INTERVAL_US_ENC);
+   return rotary_encoder_start();
 }
 
 esp_err_t rotary_encoder_free() {
    SEMAPHORE_TAKE();
 
-   esp_timer_stop(timer);
+   rotary_encoder_pause();
    esp_timer_delete(timer);
    timer = NULL;
 
@@ -109,6 +109,14 @@ esp_err_t rotary_encoder_free() {
 
    vSemaphoreDelete(mutex);
    return ESP_OK;
+}
+
+esp_err_t rotary_encoder_pause() {
+   return esp_timer_stop(timer);
+}
+
+esp_err_t rotary_encoder_start() {
+   return esp_timer_start_periodic(timer, CONFIG_EBTN_POLLING_INTERVAL_US_ENC);
 }
 
 void rotary_encoder_set_prepoll_callback(ebtn_prepoll_cb_t prepoll_callback) {
